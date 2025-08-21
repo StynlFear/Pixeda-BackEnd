@@ -27,7 +27,7 @@ createUploadDirs().catch(console.error);
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    let uploadPath = 'uploads/orders/';
+    let uploadPath = 'pixeda-volume/uploads/orders/';
     
     // Determine subdirectory based on field name
     if (file.fieldname.includes('graphicsImage')) {
