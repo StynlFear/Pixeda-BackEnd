@@ -13,8 +13,9 @@ const MONGO_URI = process.env.MONGO_URI;
     // asigură index-urile (inclusiv unique pe email)
     await Employee.syncIndexes();
 
-    app.listen(process.env.PORT || 5000, "0.0.0.0", () => {
-  console.log(`🚀 Server ready on port ${process.env.PORT || 5000}`);
+    const PORT = process.env.PORT || 5000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server ready on port ${PORT}`);
 });
 
 
