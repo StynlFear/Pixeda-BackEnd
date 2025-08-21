@@ -465,6 +465,7 @@ export const generateOrderHTML = (order) => {
 };
 
 export const generateOrderPDF = async (order) => {
+  let browser;
   try {
     // Check environment for debugging
     const envInfo = checkPuppeteerEnvironment();
@@ -475,25 +476,35 @@ export const generateOrderPDF = async (order) => {
     // Configure Chromium for Koyeb serverless environment
     const isDev = process.env.NODE_ENV === 'development';
     
-    let browser;
-    
     if (isDev) {
       // Development: use local Chrome
       logPuppeteerStatus('Using local Chrome for development');
       browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        timeout: 10000
       });
     } else {
-      // Production: use @sparticuz/chromium
+      // Production: use @sparticuz/chromium with optimized settings for Koyeb
       logPuppeteerStatus('Configuring serverless Chromium for Koyeb');
       
       const options = {
-        args: chromium.args,
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--run-all-compositor-stages-before-draw',
+          '--memory-pressure-off'
+        ],
         defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
         headless: chromium.headless,
         ignoreHTTPSErrors: true,
+        timeout: 15000, // Shorter timeout for Koyeb
       };
 
       logPuppeteerStatus('Launching browser with serverless Chromium', { 
@@ -508,19 +519,29 @@ export const generateOrderPDF = async (order) => {
       logPuppeteerStatus('Browser launched, creating page');
       const page = await browser.newPage();
       
-      // Set page timeout for Koyeb environment
-      page.setDefaultTimeout(20000);
-      page.setDefaultNavigationTimeout(20000);
+      // Set aggressive timeouts for Koyeb environment
+      await page.setDefaultTimeout(10000);
+      await page.setDefaultNavigationTimeout(10000);
+      
+      // Optimize page for faster rendering
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        if (req.resourceType() === 'stylesheet' || req.resourceType() === 'font' || req.resourceType() === 'image') {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
       
       logPuppeteerStatus('Setting page content');
-      // Set content and wait for it to load
+      // Set content with minimal wait time
       await page.setContent(html, { 
-        waitUntil: ['networkidle0', 'domcontentloaded'],
-        timeout: 15000
+        waitUntil: 'domcontentloaded', // Faster than networkidle0
+        timeout: 8000
       });
       
       logPuppeteerStatus('Generating PDF');
-      // Generate PDF with optimized settings for Koyeb
+      // Generate PDF with faster settings
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
@@ -532,7 +553,7 @@ export const generateOrderPDF = async (order) => {
         },
         preferCSSPageSize: true,
         displayHeaderFooter: false,
-        timeout: 15000
+        timeout: 8000 // Shorter timeout
       });
       
       logPuppeteerStatus('PDF generated successfully', { size: pdfBuffer.length });
@@ -540,21 +561,38 @@ export const generateOrderPDF = async (order) => {
       return pdfBuffer;
       
     } finally {
-      logPuppeteerStatus('Closing browser');
-      // Always close the browser to free memory in serverless environment
-      await browser.close();
+      if (browser) {
+        logPuppeteerStatus('Closing browser');
+        // Always close the browser to free memory in serverless environment
+        try {
+          await browser.close();
+        } catch (closeError) {
+          console.warn('Browser close warning:', closeError.message);
+        }
+      }
     }
     
   } catch (error) {
     console.error('Koyeb serverless PDF generation failed:', error);
     
+    // Ensure browser is closed even on error
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.warn('Failed to close browser after error:', closeError.message);
+      }
+    }
+    
     // Provide more specific error information for debugging
-    if (error.message.includes('Could not find Chrome')) {
+    if (error.message.includes('socket hang up')) {
+      throw new Error(`PDF generation failed - Connection timeout (Koyeb serverless constraint): ${error.message}`);
+    } else if (error.message.includes('Could not find Chrome')) {
       throw new Error(`PDF generation failed - Chrome binary not found. This is likely a deployment configuration issue on Koyeb. Error: ${error.message}`);
     } else if (error.message.includes('Protocol error')) {
       throw new Error(`PDF generation failed - Browser protocol error (common in serverless): ${error.message}`);
-    } else if (error.message.includes('Navigation timeout')) {
-      throw new Error(`PDF generation failed - Page load timeout: ${error.message}`);
+    } else if (error.message.includes('Navigation timeout') || error.message.includes('timeout')) {
+      throw new Error(`PDF generation failed - Timeout (try reducing complexity or increase Koyeb resources): ${error.message}`);
     } else if (error.message.includes('Target closed') || error.message.includes('Session closed')) {
       throw new Error(`PDF generation failed - Browser session ended unexpectedly: ${error.message}`);
     } else {
