@@ -1,5 +1,7 @@
-import puppeteer from 'puppeteer';
 import path from 'path';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
+import { checkPuppeteerEnvironment, logPuppeteerStatus } from './envCheck.js';
 
 export const generateOrderHTML = (order) => {
   // Calculate totals
@@ -463,97 +465,94 @@ export const generateOrderHTML = (order) => {
 };
 
 export const generateOrderPDF = async (order) => {
-  let browser;
-  
   try {
-    // Configuration for serverless environments like Koyeb
-    const puppeteerConfig = {
-      headless: 'new',
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--single-process',
-        '--no-zygote',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    };
-
-    // For production environments, try to use system Chrome first
-    if (process.env.NODE_ENV === 'production') {
-      // Try to find system Chrome/Chromium
-      const possiblePaths = [
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/google-chrome',
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium',
-        process.env.PUPPETEER_EXECUTABLE_PATH
-      ].filter(Boolean);
-
-      for (const executablePath of possiblePaths) {
-        try {
-          const fs = await import('fs');
-          if (fs.existsSync && fs.existsSync(executablePath)) {
-            puppeteerConfig.executablePath = executablePath;
-            console.log(`Using Chrome at: ${executablePath}`);
-            break;
-          }
-        } catch (err) {
-          // Continue to next path
-        }
-      }
-      
-      // If no system Chrome found, log this for debugging
-      if (!puppeteerConfig.executablePath) {
-        console.log('No system Chrome found, using Puppeteer bundled Chromium');
-        console.log('Available Chrome paths checked:', possiblePaths);
-      }
-    }
-
-    console.log('Launching Puppeteer with config:', {
-      headless: puppeteerConfig.headless,
-      executablePath: puppeteerConfig.executablePath || 'bundled',
-      args: puppeteerConfig.args.slice(0, 3) // Log first few args only
-    });
-
-    browser = await puppeteer.launch(puppeteerConfig);
-    
-    const page = await browser.newPage();
+    // Check environment for debugging
+    const envInfo = checkPuppeteerEnvironment();
+    logPuppeteerStatus('Starting PDF generation', { orderId: order._id });
     
     const html = generateOrderHTML(order);
     
-    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    // Configure Chromium for Koyeb serverless environment
+    const isDev = process.env.NODE_ENV === 'development';
     
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: false,
-      displayHeaderFooter: false,
-      margin: {
-        top: '20mm',
-        right: '15mm',
-        bottom: '20mm',
-        left: '15mm'
-      }
-    });
+    const options = {
+      args: [
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ],
+      defaultViewport: chromium.defaultViewport,
+      executablePath: isDev ? undefined : await chromium.executablePath('/opt/chrome'),
+      headless: true,
+      ignoreHTTPSErrors: true,
+      timeout: 30000,
+    };
+
+    logPuppeteerStatus('Launching browser', { isDev, argsCount: options.args.length });
+
+    // Launch Puppeteer with serverless Chromium
+    const browser = await puppeteer.launch(options);
     
-    if (!pdfBuffer || pdfBuffer.length === 0) {
-      throw new Error('Generated PDF buffer is empty');
+    try {
+      logPuppeteerStatus('Browser launched, creating page');
+      const page = await browser.newPage();
+      
+      // Set page timeout for Koyeb environment
+      page.setDefaultTimeout(20000);
+      page.setDefaultNavigationTimeout(20000);
+      
+      logPuppeteerStatus('Setting page content');
+      // Set content and wait for it to load
+      await page.setContent(html, { 
+        waitUntil: ['networkidle0', 'domcontentloaded'],
+        timeout: 15000
+      });
+      
+      logPuppeteerStatus('Generating PDF');
+      // Generate PDF with optimized settings for Koyeb
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20mm',
+          right: '15mm',
+          bottom: '20mm',
+          left: '15mm'
+        },
+        preferCSSPageSize: true,
+        displayHeaderFooter: false,
+        timeout: 15000
+      });
+      
+      logPuppeteerStatus('PDF generated successfully', { size: pdfBuffer.length });
+      console.log(`PDF generated successfully with Puppeteer on Koyeb, size: ${pdfBuffer.length} bytes`);
+      return pdfBuffer;
+      
+    } finally {
+      logPuppeteerStatus('Closing browser');
+      // Always close the browser to free memory in serverless environment
+      await browser.close();
     }
     
-    // Ensure we return a proper Buffer
-    return Buffer.from(pdfBuffer);
   } catch (error) {
-    console.error('PDF generation error:', error);
-    throw error;
-  } finally {
-    if (browser) {
-      await browser.close();
+    console.error('Koyeb serverless PDF generation failed:', error);
+    
+    // Provide more specific error information for debugging
+    if (error.message.includes('Protocol error')) {
+      throw new Error(`PDF generation failed - Browser protocol error (common in serverless): ${error.message}`);
+    } else if (error.message.includes('Navigation timeout')) {
+      throw new Error(`PDF generation failed - Page load timeout: ${error.message}`);
+    } else if (error.message.includes('Target closed') || error.message.includes('Session closed')) {
+      throw new Error(`PDF generation failed - Browser session ended unexpectedly: ${error.message}`);
+    } else {
+      throw new Error(`PDF generation failed: ${error.message}`);
     }
   }
 };
+

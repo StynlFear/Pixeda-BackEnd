@@ -5,10 +5,10 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node src/server.js"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^138.0.2",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -22,7 +22,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
     "object-assign": "^4.1.1",
-    "puppeteer": "^24.17.0",
+    "puppeteer-core": "^24.17.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },
