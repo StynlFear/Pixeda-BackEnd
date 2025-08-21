@@ -477,9 +477,20 @@ export const exportOrderAsPDF = async (req, res) => {
     res.end(pdfBuffer);
   } catch (e) {
     console.error('PDF generation error:', e);
+    console.error('Error stack:', e.stack);
+    console.error('Environment:', {
+      NODE_ENV: process.env.NODE_ENV,
+      PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH,
+      platform: process.platform
+    });
+    
     // Make sure we haven't started sending the response
     if (!res.headersSent) {
-      res.status(500).json({ error: "Failed to generate PDF", details: e.message });
+      res.status(500).json({ 
+        error: "Failed to generate PDF", 
+        details: e.message,
+        timestamp: new Date().toISOString()
+      });
     }
   }
 };

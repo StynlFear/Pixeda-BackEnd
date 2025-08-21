@@ -8,7 +8,7 @@ export const openapiSpec = {
     contact: { name: "Pixeda", url: "https://pixeda.ro" }
   },
   servers: [{ url: "http://localhost:8000" }],
-  tags: [
+  tags: [ 
     { name: "Auth", description: "Login / token refresh / logout" },
     { name: "Employees", description: "CRUD employees (admin required for write ops)" },
     { name: "Clients", description: "CRUD clients (admin required for write ops)" },

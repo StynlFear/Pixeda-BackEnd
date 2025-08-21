@@ -466,16 +466,62 @@ export const generateOrderPDF = async (order) => {
   let browser;
   
   try {
-    browser = await puppeteer.launch({
+    // Configuration for serverless environments like Koyeb
+    const puppeteerConfig = {
       headless: 'new',
       args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox',
         '--disable-web-security',
         '--disable-features=VizDisplayCompositor',
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process',
+        '--no-zygote',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
       ]
+    };
+
+    // For production environments, try to use system Chrome first
+    if (process.env.NODE_ENV === 'production') {
+      // Try to find system Chrome/Chromium
+      const possiblePaths = [
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        process.env.PUPPETEER_EXECUTABLE_PATH
+      ].filter(Boolean);
+
+      for (const executablePath of possiblePaths) {
+        try {
+          const fs = await import('fs');
+          if (fs.existsSync && fs.existsSync(executablePath)) {
+            puppeteerConfig.executablePath = executablePath;
+            console.log(`Using Chrome at: ${executablePath}`);
+            break;
+          }
+        } catch (err) {
+          // Continue to next path
+        }
+      }
+      
+      // If no system Chrome found, log this for debugging
+      if (!puppeteerConfig.executablePath) {
+        console.log('No system Chrome found, using Puppeteer bundled Chromium');
+        console.log('Available Chrome paths checked:', possiblePaths);
+      }
+    }
+
+    console.log('Launching Puppeteer with config:', {
+      headless: puppeteerConfig.headless,
+      executablePath: puppeteerConfig.executablePath || 'bundled',
+      args: puppeteerConfig.args.slice(0, 3) // Log first few args only
     });
+
+    browser = await puppeteer.launch(puppeteerConfig);
     
     const page = await browser.newPage();
     
