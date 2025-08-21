@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "build": "npm install",
+    "postinstall": "node -e \"try { require('@sparticuz/chromium').executablePath(); console.log('Chromium binary ready'); } catch(e) { console.error('Chromium setup failed:', e.message); }\""
   },
   "dependencies": {
     "@sparticuz/chromium": "^138.0.2",

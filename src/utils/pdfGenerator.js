@@ -475,6 +475,22 @@ export const generateOrderPDF = async (order) => {
     // Configure Chromium for Koyeb serverless environment
     const isDev = process.env.NODE_ENV === 'development';
     
+    // Get the executable path with proper error handling
+    let executablePath;
+    if (isDev) {
+      // In development, use system Chrome/Chromium
+      executablePath = undefined;
+    } else {
+      // In production (Koyeb), use the serverless Chromium
+      try {
+        executablePath = await chromium.executablePath();
+        logPuppeteerStatus('Chromium executable found', { path: executablePath });
+      } catch (pathError) {
+        logPuppeteerStatus('Failed to get Chromium path', { error: pathError.message });
+        throw new Error(`Failed to locate Chromium binary: ${pathError.message}`);
+      }
+    }
+    
     const options = {
       args: [
         ...chromium.args,
@@ -488,13 +504,13 @@ export const generateOrderPDF = async (order) => {
         '--disable-gpu'
       ],
       defaultViewport: chromium.defaultViewport,
-      executablePath: isDev ? undefined : await chromium.executablePath('/opt/chrome'),
+      executablePath,
       headless: true,
       ignoreHTTPSErrors: true,
       timeout: 30000,
     };
 
-    logPuppeteerStatus('Launching browser', { isDev, argsCount: options.args.length });
+    logPuppeteerStatus('Launching browser', { isDev, argsCount: options.args.length, hasExecutablePath: !!executablePath });
 
     // Launch Puppeteer with serverless Chromium
     const browser = await puppeteer.launch(options);
@@ -544,7 +560,9 @@ export const generateOrderPDF = async (order) => {
     console.error('Koyeb serverless PDF generation failed:', error);
     
     // Provide more specific error information for debugging
-    if (error.message.includes('Protocol error')) {
+    if (error.message.includes('Could not find Chrome')) {
+      throw new Error(`PDF generation failed - Chrome binary not found. This is likely a deployment configuration issue on Koyeb. Error: ${error.message}`);
+    } else if (error.message.includes('Protocol error')) {
       throw new Error(`PDF generation failed - Browser protocol error (common in serverless): ${error.message}`);
     } else if (error.message.includes('Navigation timeout')) {
       throw new Error(`PDF generation failed - Page load timeout: ${error.message}`);
@@ -554,5 +572,11 @@ export const generateOrderPDF = async (order) => {
       throw new Error(`PDF generation failed: ${error.message}`);
     }
   }
+};
+
+// Fallback function for debugging - returns HTML instead of PDF if Puppeteer fails
+export const generateOrderHTMLFallback = (order) => {
+  console.log('Using HTML fallback due to PDF generation failure');
+  return generateOrderHTML(order);
 };
 
