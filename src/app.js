@@ -21,8 +21,12 @@ const app = express();
 
 // middlewares de bază
 app.use(securityHeaders);
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : ["http://localhost:3000"];
+
 app.use(cors({
-  origin: ["http://localhost:3000"], 
+  origin: allowedOrigins,
   methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true, 
