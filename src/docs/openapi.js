@@ -1212,62 +1212,6 @@ AuditInsights: {
   }
 },
 
-"/api/orders/{id}/preview": {
-  get: {
-    tags: ["Orders"],
-    summary: "Preview order HTML (for debugging PDF generation)",
-    description: "Generate and view the HTML version of the order that would be used for PDF generation",
-    security: [{ bearerAuth: [] }],
-    parameters: [
-      { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Order ID" }
-    ],
-    responses: {
-      200: { 
-        description: "HTML preview", 
-        content: { 
-          "text/html": { 
-            schema: { type: "string" } 
-          } 
-        }
-      },
-      404: { description: "Order not found" },
-      401: { description: "Unauthorized" },
-      500: { description: "HTML generation failed" }
-    }
-  }
-},
-
-"/api/orders/{id}/pdf": {
-  get: {
-    tags: ["Orders"],
-    summary: "Export order as PDF",
-    description: "Generate and download a PDF version of the order that looks like a purchase order",
-    security: [{ bearerAuth: [] }],
-    parameters: [
-      { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Order ID" }
-    ],
-    responses: {
-      200: { 
-        description: "PDF file", 
-        content: { 
-          "application/pdf": { 
-            schema: { type: "string", format: "binary" } 
-          } 
-        },
-        headers: {
-          "Content-Disposition": {
-            description: "Attachment filename",
-            schema: { type: "string", example: "attachment; filename=\"order-ABC12345.pdf\"" }
-          }
-        }
-      },
-      404: { description: "Order not found" },
-      401: { description: "Unauthorized" },
-      500: { description: "PDF generation failed" }
-    }
-  }
-},
-
 "/api/uploads/{filePath}": {
   get: {
     tags: ["Uploads"],

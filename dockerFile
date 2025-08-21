@@ -1,15 +1,5 @@
 FROM node:20-bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium ca-certificates fonts-liberation fonts-noto-color-emoji \
-    libasound2 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxss1 libxshmfence1 \
-    libnss3 libnspr4 libx11-6 libxcomposite1 libxdamage1 libxfixes3 \
-    libxrandr2 libgbm1 libxkbcommon0 libgtk-3-0 \
- && which chromium && chromium --version \
- && rm -rf /var/lib/apt/lists/*
-
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 
 WORKDIR /app

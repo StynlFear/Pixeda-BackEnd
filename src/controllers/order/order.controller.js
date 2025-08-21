@@ -2,7 +2,6 @@ import { validationResult } from "express-validator";
 import Order from "../../models/order/order.model.js";
 import mongoose from "mongoose";
 import { mergeFilesWithBody, deleteUploadedFiles, getFileUrl } from "../../utils/fileUtils.js";
-import { generateOrderPDF, generateOrderHTML } from "../../utils/pdfGenerator.js";
 
 const bailIfInvalid = (req, res) => {
   const errors = validationResult(req);
@@ -419,103 +418,6 @@ export const updateItemStatus = async (req, res) => {
       .lean();
 
     res.json(populatedDoc);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-};
-
-export const exportOrderAsPDF = async (req, res) => {
-  if (bailIfInvalid(req, res)) return;
-
-  try {
-    console.log(`Generating PDF for order: ${req.params.id}`);
-    
-    const doc = await Order.findById(req.params.id)
-      .populate('customer', 'firstName lastName email phone whatsapp')
-      .populate('customerCompany', 'name cui description')
-      .populate('items.product', 'productName price')
-      .populate('items.assignments.assignedTo', 'firstName lastName')
-      .lean();
-    
-    if (!doc) {
-      console.log(`Order not found: ${req.params.id}`);
-      return res.status(404).json({ error: "Order not found" });
-    }
-    
-    console.log(`Order found, generating PDF for order with ${doc.items?.length || 0} items`);
-    
-    // Add file URLs to the order (for any future use in PDF)
-    const orderWithUrls = addFileUrlsToOrder(doc);
-    
-    // Generate PDF
-    const pdfBuffer = await generateOrderPDF(orderWithUrls);
-    
-    if (!pdfBuffer || pdfBuffer.length === 0) {
-      throw new Error('Generated PDF buffer is empty');
-    }
-    
-    console.log(`PDF generated successfully, size: ${pdfBuffer.length} bytes`);
-    
-    // Set headers for PDF download
-    const orderNumber = doc._id.toString().slice(-8).toUpperCase();
-    const filename = `order-${orderNumber}.pdf`;
-    
-    // Clear any previous headers
-    res.clearCookie();
-    
-    // Set proper headers for PDF
-    res.writeHead(200, {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': pdfBuffer.length,
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    });
-    
-    console.log(`Sending PDF with filename: ${filename}`);
-    res.end(pdfBuffer);
-  } catch (e) {
-    console.error('PDF generation error:', e);
-    console.error('Error stack:', e.stack);
-    console.error('Environment:', {
-      NODE_ENV: process.env.NODE_ENV,
-      PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH,
-      platform: process.platform
-    });
-    
-    // Make sure we haven't started sending the response
-    if (!res.headersSent) {
-      res.status(500).json({ 
-        error: "Failed to generate PDF", 
-        details: e.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  }
-};
-
-// Debug endpoint to view HTML before PDF conversion
-export const previewOrderHTML = async (req, res) => {
-  if (bailIfInvalid(req, res)) return;
-
-  try {
-    const doc = await Order.findById(req.params.id)
-      .populate('customer', 'firstName lastName email phone whatsapp')
-      .populate('customerCompany', 'name cui description')
-      .populate('items.product', 'productName price')
-      .populate('items.assignments.assignedTo', 'firstName lastName')
-      .lean();
-    
-    if (!doc) return res.status(404).json({ error: "Order not found" });
-    
-    const orderWithUrls = addFileUrlsToOrder(doc);
-    
-    // Generate the same HTML that would be used for PDF
-    const html = generateOrderHTML(orderWithUrls);
-    
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
