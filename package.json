@@ -27,8 +27,12 @@
   "devDependencies": {
     "nodemon": "^3.1.0"
   },
-  "description": "",
-  "keywords": [],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "description": "Pixeda Backend API",
+  "keywords": ["api", "backend", "nodejs", "express"],
   "author": "",
   "license": "ISC"
 }
