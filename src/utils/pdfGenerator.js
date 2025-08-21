@@ -463,29 +463,39 @@ export const generateOrderHTML = (order) => {
   </html>
   `;
 };
+function resolveChromePath() {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROMIUM_PATH,
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+  ].filter(Boolean);
+
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {}
+  }
+  throw new Error(
+    "Chromium not found. Set PUPPETEER_EXECUTABLE_PATH or install chromium in the image."
+  );
+}
 
 export const generateOrderPDF = async (order) => {
-  let browser;
+  let browser = null;
   try {
     const html = generateOrderHTML(order);
     const isDev = process.env.NODE_ENV === "development";
-
-    // Prefer system Chromium in container
-    const executablePath =
-      process.env.PUPPETEER_EXECUTABLE_PATH ||
-      process.env.CHROMIUM_PATH ||
-      "/usr/bin/chromium";
-
-    const hasSystemChrome = fs.existsSync(executablePath);
 
     const launchOpts = isDev
       ? {
           headless: "new",
           args: ["--no-sandbox", "--disable-setuid-sandbox"],
         }
-      : hasSystemChrome
-      ? {
-          executablePath,
+      : {
+          executablePath: resolveChromePath(),
           headless: "new",
           args: [
             "--no-sandbox",
@@ -494,26 +504,8 @@ export const generateOrderPDF = async (order) => {
             "--single-process",
             "--no-zygote",
           ],
-          // give Chrome time to boot on cold start
           timeout: 30000,
-        }
-      : (async () => {
-          // Fallback to sparticuz only if you really want it:
-          // (but on Koyeb, stick to system Chromium)
-          return {
-            executablePath: await chromium.executablePath(),
-            headless: chromium.headless,
-            args: [
-              ...chromium.args,
-              "--no-sandbox",
-              "--disable-setuid-sandbox",
-              "--disable-dev-shm-usage",
-              "--single-process",
-              "--no-zygote",
-            ],
-            timeout: 30000,
-          };
-        })();
+        };
 
     browser = await puppeteer.launch(launchOpts);
 
@@ -521,8 +513,6 @@ export const generateOrderPDF = async (order) => {
     page.setDefaultTimeout(20000);
     page.setDefaultNavigationTimeout(20000);
 
-    // Don’t over-tweak flags; keep rendering simple and stable
-    // If you keep interception, don't abort CSS/fonts (you use fonts)
     await page.setContent(html, { waitUntil: "domcontentloaded" });
     await page.emulateMediaType("screen");
 
@@ -531,22 +521,16 @@ export const generateOrderPDF = async (order) => {
       printBackground: true,
       margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
       preferCSSPageSize: true,
-      // (page.pdf has no 'timeout' option; removed)
     });
 
     await browser.close();
     return pdfBuffer;
   } catch (err) {
-    if (browser) try { await browser.close(); } catch {}
-    throw new Error(
-      `PDF generation failed: ${err.message}`
-    );
+    try { if (browser) await browser.close(); } catch {}
+    throw new Error(`PDF generation failed: ${err.message}`);
   }
 };
 
-// Fallback function for debugging - returns HTML instead of PDF if Puppeteer fails
 export const generateOrderHTMLFallback = (order) => {
-  console.log('Using HTML fallback due to PDF generation failure');
   return generateOrderHTML(order);
 };
-
