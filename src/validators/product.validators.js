@@ -2,7 +2,7 @@ import { body, param, query } from "express-validator";
 
 export const createProductRules = [
   body("productName").isString().trim().notEmpty().withMessage("productName is required"),
-  body("productCode").isString().trim().notEmpty().withMessage("productCode is required"),
+  body("productCode").optional().isString().trim(),
   body("type").optional().isString().trim(),
   body("description").optional().isString().trim(),
   body("price").optional().isFloat({ min: 0 }).withMessage("price must be >= 0"),
