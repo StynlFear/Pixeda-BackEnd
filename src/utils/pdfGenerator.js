@@ -463,26 +463,6 @@ export const generateOrderHTML = (order) => {
   </html>
   `;
 };
-function resolveChromePath() {
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROMIUM_PATH,
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/google-chrome",
-  ].filter(Boolean);
-
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {}
-  }
-  throw new Error(
-    "Chromium not found. Set PUPPETEER_EXECUTABLE_PATH or install chromium in the image."
-  );
-}
-
 export const generateOrderPDF = async (order) => {
   let browser = null;
   try {
