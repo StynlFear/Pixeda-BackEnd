@@ -13,9 +13,10 @@ const MONGO_URI = process.env.MONGO_URI;
     // asigură index-urile (inclusiv unique pe email)
     await Employee.syncIndexes();
 
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Server ready on http://localhost:${PORT}`);
-    });
+    app.listen(process.env.PORT || 5000, "0.0.0.0", () => {
+  console.log(`🚀 Server ready on port ${process.env.PORT || 5000}`);
+});
+
 
     const shutdown = (signal) => {
       console.log(`\n${signal} received. Shutting down...`);
