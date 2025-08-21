@@ -8,11 +8,12 @@ function cookieOpts(days = 30) {
   const prod = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    secure: false,        // false for localhost
-    sameSite: "lax",      // Changed from "none" to "lax" for localhost
+    secure: prod,         // true in production, false for localhost
+    sameSite: prod ? "none" : "lax",  // "none" for cross-origin in production, "lax" for localhost
     path: "/",
-    maxAge: days * 24 * 60 * 60 * 1000
-    // Remove domain completely to allow cross-origin
+    maxAge: days * 24 * 60 * 60 * 1000,
+    // Don't set domain to allow cross-origin cookies
+    ...(prod && { domain: process.env.COOKIE_DOMAIN }) // Only set domain in production if specified
   };
 }
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
