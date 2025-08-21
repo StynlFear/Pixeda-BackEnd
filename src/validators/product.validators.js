@@ -10,7 +10,7 @@ export const createProductRules = [
 
 export const updateProductRules = [
   body("productName").optional().isString().trim().notEmpty(),
-  body("productCode").optional().isString().trim().notEmpty(),
+  body("productCode").optional().isString().trim(),
   body("type").optional().isString().trim(),
   body("description").optional().isString().trim(),
   body("price").optional().isFloat({ min: 0 }).withMessage("price must be >= 0"),
