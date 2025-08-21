@@ -475,45 +475,34 @@ export const generateOrderPDF = async (order) => {
     // Configure Chromium for Koyeb serverless environment
     const isDev = process.env.NODE_ENV === 'development';
     
-    // Get the executable path with proper error handling
-    let executablePath;
-    if (isDev) {
-      // In development, use system Chrome/Chromium
-      executablePath = undefined;
-    } else {
-      // In production (Koyeb), use the serverless Chromium
-      try {
-        executablePath = await chromium.executablePath();
-        logPuppeteerStatus('Chromium executable found', { path: executablePath });
-      } catch (pathError) {
-        logPuppeteerStatus('Failed to get Chromium path', { error: pathError.message });
-        throw new Error(`Failed to locate Chromium binary: ${pathError.message}`);
-      }
-    }
+    let browser;
     
-    const options = {
-      args: [
-        ...chromium.args,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu'
-      ],
-      defaultViewport: chromium.defaultViewport,
-      executablePath,
-      headless: true,
-      ignoreHTTPSErrors: true,
-      timeout: 30000,
-    };
+    if (isDev) {
+      // Development: use local Chrome
+      logPuppeteerStatus('Using local Chrome for development');
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+    } else {
+      // Production: use @sparticuz/chromium
+      logPuppeteerStatus('Configuring serverless Chromium for Koyeb');
+      
+      const options = {
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+        ignoreHTTPSErrors: true,
+      };
 
-    logPuppeteerStatus('Launching browser', { isDev, argsCount: options.args.length, hasExecutablePath: !!executablePath });
+      logPuppeteerStatus('Launching browser with serverless Chromium', { 
+        argsCount: options.args.length, 
+        executablePath: options.executablePath 
+      });
 
-    // Launch Puppeteer with serverless Chromium
-    const browser = await puppeteer.launch(options);
+      browser = await puppeteer.launch(options);
+    }
     
     try {
       logPuppeteerStatus('Browser launched, creating page');
