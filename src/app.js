@@ -13,7 +13,7 @@ import companyRoutes from "./routes/company/company.route.js";
 import orderRoutes from "./routes/order/order.route.js";
 import uploadsRoutes from "./routes/uploads/uploads.route.js";
 import insightsRoutes from "./routes/insights/insights.route.js";
-
+import { UPLOADS_ROOT } from "./middlewares/upload.js";
 import swaggerUi from "swagger-ui-express";
 import { openapiSpec } from "./docs/openapi.js";
 
@@ -57,7 +57,7 @@ app.use("/api/clients", clientsRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/companies", companyRoutes);
 app.use("/api/orders", orderRoutes);
-app.use("/api/uploads", uploadsRoutes);
+app.use("/api/uploads", express.static(UPLOADS_ROOT), uploadsRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use(mongoErrorHandler);
 // fallback generic
