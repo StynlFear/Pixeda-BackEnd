@@ -13,7 +13,8 @@ export const openapiSpec = {
     { name: "Employees", description: "CRUD employees (admin required for write ops)" },
     { name: "Clients", description: "CRUD clients (admin required for write ops)" },
     { name: "Companies", description: "CRUD companies (admin required for write ops)" },
-    { name: "Products", description: "CRUD products (admin required for write ops)" },
+  { name: "Products", description: "CRUD products (admin required for write ops)" },
+  { name: "Materials", description: "Manage materials (admin)" },
     { name: "Orders", description: "CRUD orders with image upload support" },
     { name: "Uploads", description: "File serving endpoints" },
     { name: "Insights", description: "Business analytics and insights (admin only)" }
@@ -23,6 +24,21 @@ export const openapiSpec = {
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" }
     },
     schemas: {
+      Material: {
+        type: "object",
+        properties: {
+          _id: { type: "string", example: "66d0f1d3d8e4a6a1b2345678" },
+          name: { type: "string", example: "Vinyl" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" }
+        },
+        required: ["name"]
+      },
+      MaterialCreate: {
+        type: "object",
+        required: ["name"],
+        properties: { name: { type: "string" } }
+      },
       Employee: {
         type: "object",
         properties: {
@@ -221,6 +237,13 @@ Product: {
     productName: { type: "string", example: "Large Vinyl Banner" },
     productCode: { type: "string", example: "BAN-VINYL-L" },
     description: { type: "string", example: "Premium outdoor vinyl", nullable: true },
+    materials: {
+      oneOf: [
+        { type: "array", items: { type: "string" }, description: "Array of Material IDs when not populated" },
+        { type: "array", items: { $ref: "#/components/schemas/Material" }, description: "Populated materials" }
+      ],
+      nullable: true
+    },
     price: { type: "number", example: 149.99, nullable: true },
     createdAt: { type: "string", format: "date-time" },
     updatedAt: { type: "string", format: "date-time" }
@@ -235,6 +258,7 @@ ProductCreate: {
     productName: { type: "string" },
     productCode: { type: "string" },
     description: { type: "string" },
+  materials: { type: "array", items: { type: "string" }, description: "Array of Material IDs" },
     price: { type: "number", minimum: 0 }
   }
 },
@@ -245,6 +269,7 @@ ProductUpdate: {
     productName: { type: "string" },
     productCode: { type: "string" },
     description: { type: "string" },
+  materials: { type: "array", items: { type: "string" }, description: "Array of Material IDs" },
     price: { type: "number", minimum: 0 }
   }
 },
@@ -656,17 +681,71 @@ AuditInsights: {
     }
   },
   paths: {
+    "/api/materials": {
+      get: {
+        tags: ["Materials"],
+        summary: "List all materials",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: "OK",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    items: { type: "array", items: { $ref: "#/components/schemas/Material" } }
+                  }
+                }
+              }
+            }
+          },
+          401: { description: "Unauthorized" }
+        }
+      },
+      post: {
+        tags: ["Materials"],
+        summary: "Create material (admin)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/MaterialCreate" } } }
+        },
+        responses: {
+          201: { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/Material" } } } },
+          409: { description: "Material already exists" },
+          422: { description: "Validation error" },
+          401: { description: "Unauthorized" },
+          403: { description: "Forbidden" }
+        }
+      }
+    },
+    "/api/materials/{id}": {
+      delete: {
+        tags: ["Materials"],
+        summary: "Delete material (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: { description: "OK", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } } },
+          404: { description: "Not found" },
+          401: { description: "Unauthorized" },
+          403: { description: "Forbidden" }
+        }
+      }
+    },
     "/api/products": {
   get: {
     tags: ["Products"],
     summary: "List products (paginated, searchable, filterable)",
     security: [{ bearerAuth: [] }],
     parameters: [
-      { name: "q", in: "query", schema: { type: "string" }, description: "Full‑text on name/code" },
-      { name: "type", in: "query", schema: { type: "string" } },
+  { name: "q", in: "query", schema: { type: "string" }, description: "Full‑text on name/code/description" },
+  { name: "type", in: "query", schema: { type: "string" } },
+  { name: "materials", in: "query", schema: { type: "string" }, description: "Comma-separated Material IDs" },
       { name: "page", in: "query", schema: { type: "integer", default: 1, minimum: 1 } },
       { name: "limit", in: "query", schema: { type: "integer", default: 10, minimum: 1, maximum: 100 } },
-      { name: "sortBy", in: "query", schema: { type: "string", enum: ["productName","productCode","price","createdAt","updatedAt"], default: "createdAt" } },
+  { name: "sortBy", in: "query", schema: { type: "string", enum: ["productName","productCode","price","createdAt","updatedAt"], default: "createdAt" } },
       { name: "order", in: "query", schema: { type: "string", enum: ["asc","desc"], default: "desc" } }
     ],
     responses: {
