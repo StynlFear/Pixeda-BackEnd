@@ -2,6 +2,8 @@ import { validationResult } from "express-validator";
 import Order from "../../models/order/order.model.js";
 import mongoose from "mongoose";
 import { mergeFilesWithBody, deleteUploadedFiles, getFileUrl } from "../../utils/fileUtils.js";
+import { Product } from "../../models/product/product.model.js";
+import { Material } from "../../models/material/material.model.js";
 
 const bailIfInvalid = (req, res) => {
   const errors = validationResult(req);
@@ -68,7 +70,7 @@ export const listOrders = async (req, res) => {
       Order.find(q)
         .populate('customer', 'firstName lastName email phone')
         .populate('customerCompany', 'name cui')
-        .populate('items.product', 'productName price')
+        .populate({ path: 'items.product', select: 'productName price materials', populate: { path: 'materials', select: 'name' } })
         .populate('items.assignments.assignedTo', 'firstName lastName')
         .sort(sort)
         .skip((page - 1) * limit)
@@ -77,10 +79,25 @@ export const listOrders = async (req, res) => {
       Order.countDocuments(q),
     ]);
 
-    // Add file URLs to each order
-    const itemsWithUrls = items.map(order => addFileUrlsToOrder(order));
+    // Add file URLs to each order, compute materials snapshot and build customer/company display string
+    const itemsWithExtras = items.map(order => {
+      const o = addFileUrlsToOrder(order);
 
-    res.json({ total, page, limit, sort, items: itemsWithUrls });
+      if (o.items && Array.isArray(o.items)) {
+        o.items.forEach(item => {
+          if (!item.materialsSnapshot || item.materialsSnapshot.length === 0) {
+            const matNames = (item.product && item.product.materials && Array.isArray(item.product.materials))
+              ? item.product.materials.map(m => m.name).filter(Boolean)
+              : [];
+            item.materialsSnapshot = matNames;
+          }
+        });
+      }
+
+      return o;
+    });
+
+    res.json({ total, page, limit, sort, items: itemsWithExtras });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -93,15 +110,25 @@ export const getOrder = async (req, res) => {
     const doc = await Order.findById(req.params.id)
       .populate('customer')
       .populate('customerCompany')
-      .populate('items.product')
+      .populate({ path: 'items.product', populate: { path: 'materials', select: 'name' } })
       .populate('items.assignments.assignedTo', 'firstName lastName email')
       .lean();
     
     if (!doc) return res.status(404).json({ error: "Order not found" });
     
-    // Add file URLs to the order
+    // Add file URLs, materials snapshot and customer/company display
     const orderWithUrls = addFileUrlsToOrder(doc);
-    
+    if (orderWithUrls.items && Array.isArray(orderWithUrls.items)) {
+      orderWithUrls.items.forEach(item => {
+        if (!item.materialsSnapshot || item.materialsSnapshot.length === 0) {
+          const matNames = (item.product && item.product.materials && Array.isArray(item.product.materials))
+            ? item.product.materials.map(m => m.name).filter(Boolean)
+            : [];
+          item.materialsSnapshot = matNames;
+        }
+      });
+    }
+
     res.json(orderWithUrls);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -125,10 +152,38 @@ export const createOrder = async (req, res) => {
       }
     }
 
-    // Calculate the initial order status based on item statuses
+    // Calculate the initial order status based on item statuses and prepare materials snapshot when possible
     if (orderData.items) {
       const initialOrderStatus = calculateOrderStatus(orderData.items);
       orderData.status = initialOrderStatus;
+
+      // If items reference products by id, fetch products from DB to compute materials snapshot
+      const productIds = orderData.items
+        .map(i => i.product)
+        .filter(Boolean)
+        .map(id => (typeof id === 'string' ? id : (id._id ? id._id : id)));
+
+      if (productIds.length > 0) {
+        const products = await Product.find({ _id: { $in: productIds } }).populate('materials', 'name').lean();
+        const prodMap = new Map(products.map(p => [String(p._id), p]));
+
+        orderData.items.forEach(item => {
+          if (!item.materialsSnapshot || item.materialsSnapshot.length === 0) {
+            const pid = item.product ? String(item.product) : null;
+            const prod = pid && prodMap.has(pid) ? prodMap.get(pid) : null;
+            if (prod && prod.materials && Array.isArray(prod.materials)) {
+              item.materialsSnapshot = prod.materials.map(m => m.name).filter(Boolean);
+            } else {
+              item.materialsSnapshot = [];
+            }
+          }
+        });
+      } else {
+        // Fall back to any client-provided materialsSnapshot or empty arrays
+        orderData.items.forEach(item => {
+          if (!item.materialsSnapshot) item.materialsSnapshot = [];
+        });
+      }
     }
 
     const doc = await Order.create(orderData);
@@ -137,11 +192,11 @@ export const createOrder = async (req, res) => {
     const populatedDoc = await Order.findById(doc._id)
       .populate('customer', 'firstName lastName email phone')
       .populate('customerCompany', 'name cui')
-      .populate('items.product', 'productName price')
+      .populate({ path: 'items.product', select: 'productName price materials', populate: { path: 'materials', select: 'name' } })
       .populate('items.assignments.assignedTo', 'firstName lastName')
       .lean();
 
-    // Convert file paths to URLs for response
+    // Convert file paths to URLs for response, ensure materialsSnapshot and add customer display
     if (populatedDoc.items) {
       populatedDoc.items.forEach(item => {
         if (item.graphicsImage) {
@@ -152,6 +207,13 @@ export const createOrder = async (req, res) => {
         }
         if (item.attachments && Array.isArray(item.attachments)) {
           item.attachmentUrls = item.attachments.map(path => getFileUrl(path));
+        }
+
+        if (!item.materialsSnapshot || item.materialsSnapshot.length === 0) {
+          const matNames = (item.product && item.product.materials && Array.isArray(item.product.materials))
+            ? item.product.materials.map(m => m.name).filter(Boolean)
+            : [];
+          item.materialsSnapshot = matNames;
         }
       });
     }
@@ -185,10 +247,36 @@ export const updateOrder = async (req, res) => {
       }
     }
 
-    // If items are being updated, calculate the new order status
+    // If items are being updated, calculate the new order status and ensure materialsSnapshot when possible
     if (orderData.items) {
       const newOrderStatus = calculateOrderStatus(orderData.items);
       orderData.status = newOrderStatus;
+
+      const productIds = orderData.items
+        .map(i => i.product)
+        .filter(Boolean)
+        .map(id => (typeof id === 'string' ? id : (id._id ? id._id : id)));
+
+      if (productIds.length > 0) {
+        const products = await Product.find({ _id: { $in: productIds } }).populate('materials', 'name').lean();
+        const prodMap = new Map(products.map(p => [String(p._id), p]));
+
+        orderData.items.forEach(item => {
+          if (!item.materialsSnapshot || item.materialsSnapshot.length === 0) {
+            const pid = item.product ? String(item.product) : null;
+            const prod = pid && prodMap.has(pid) ? prodMap.get(pid) : null;
+            if (prod && prod.materials && Array.isArray(prod.materials)) {
+              item.materialsSnapshot = prod.materials.map(m => m.name).filter(Boolean);
+            } else {
+              item.materialsSnapshot = [];
+            }
+          }
+        });
+      } else {
+        orderData.items.forEach(item => {
+          if (!item.materialsSnapshot) item.materialsSnapshot = [];
+        });
+      }
     }
 
     const doc = await Order.findByIdAndUpdate(req.params.id, orderData, {
@@ -197,7 +285,7 @@ export const updateOrder = async (req, res) => {
     })
       .populate('customer', 'firstName lastName email phone')
       .populate('customerCompany', 'name cui')
-      .populate('items.product', 'productName price')
+      .populate({ path: 'items.product', select: 'productName price materials', populate: { path: 'materials', select: 'name' } })
       .populate('items.assignments.assignedTo', 'firstName lastName')
       .lean();
 
@@ -206,7 +294,7 @@ export const updateOrder = async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // Convert file paths to URLs for response
+    // Convert file paths to URLs for response and ensure materialsSnapshot and customer display
     if (doc.items) {
       doc.items.forEach(item => {
         if (item.graphicsImage) {
@@ -217,6 +305,13 @@ export const updateOrder = async (req, res) => {
         }
         if (item.attachments && Array.isArray(item.attachments)) {
           item.attachmentUrls = item.attachments.map(path => getFileUrl(path));
+        }
+
+        if (!item.materialsSnapshot || item.materialsSnapshot.length === 0) {
+          const matNames = (item.product && item.product.materials && Array.isArray(item.product.materials))
+            ? item.product.materials.map(m => m.name).filter(Boolean)
+            : [];
+          item.materialsSnapshot = matNames;
         }
       });
     }

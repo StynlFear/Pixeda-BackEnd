@@ -285,7 +285,13 @@ PaginatedProducts: {
 OrderItem: {
   type: "object",
   properties: {
-    product: { type: "string", example: "66c0f1d3d8e4a6a1b2345678", description: "Product ID" },
+    product: {
+      oneOf: [
+        { type: "string", example: "66c0f1d3d8e4a6a1b2345678", description: "Product ID" },
+        { $ref: "#/components/schemas/Product" }
+      ],
+      description: "Product reference (id) or populated Product object"
+    },
     productNameSnapshot: { type: "string", example: "Large Vinyl Banner" },
     descriptionSnapshot: { type: "string", example: "Premium outdoor vinyl", nullable: true },
     priceSnapshot: { type: "number", example: 149.99, nullable: true },
@@ -295,7 +301,8 @@ OrderItem: {
       enum: ["TO_DO", "GRAPHICS", "PRINTING", "CUTTING", "FINISHING", "PACKING", "DONE", "STANDBY", "CANCELLED"],
       example: "TO_DO"
     },
-    attachments: { type: "array", items: { type: "string" }, description: "File paths" },
+  attachments: { type: "array", items: { type: "string" }, description: "File paths" },
+  attachmentUrls: { type: "array", items: { type: "string" }, description: "Public URLs for attachments (added in responses)", nullable: true },
     graphicsImage: { type: "string", example: "uploads/orders/graphics/order123-item0-design.jpg", nullable: true },
     graphicsImageUrl: { type: "string", example: "/api/uploads/orders/graphics/order123-item0-design.jpg", nullable: true },
     finishedProductImage: { type: "string", example: "uploads/orders/finished/order123-item0-final.jpg", nullable: true },
@@ -320,10 +327,17 @@ OrderItem: {
             enum: ["TO_DO", "GRAPHICS", "PRINTING", "CUTTING", "FINISHING", "PACKING", "DONE", "STANDBY", "CANCELLED"]
           },
           assignedTo: { type: "string", example: "66b8b2a2b59c0b7f1b3f4a1d", description: "Employee ID" },
-          stageNotes: { type: "string", example: "Use 350gr matte paper", nullable: true }
+          stageNotes: { type: "string", example: "Use 350gr matte paper", nullable: true },
+          assignedAt: { type: "string", format: "date-time", nullable: true },
+          startedAt: { type: "string", format: "date-time", nullable: true },
+          completedAt: { type: "string", format: "date-time", nullable: true },
+          timeSpent: { type: "number", description: "Milliseconds spent on this assignment", nullable: true },
+          isActive: { type: "boolean", description: "True when assignment is currently active" }
         }
       }
     }
+  ,
+  materialsSnapshot: { type: "array", items: { type: "string" }, description: "Snapshot of material names for the product at order time", nullable: true }
   },
   required: ["product", "productNameSnapshot", "quantity"]
 },
@@ -1441,3 +1455,4 @@ AuditInsights: {
 }
   }
 };
+// end of openapiSpec

@@ -491,7 +491,7 @@ export const getEmployeeInsights = async (req, res) => {
 
     const employeeActivity = allEmployees.map(emp => ({
       ...emp,
-      isActive: activeEmployeeIds.some(id => id.toString() === emp._id.toString()),
+      isActive: activeEmployeeIds.some(id => String(id) === String(emp._id)),
       lastActivity: null // Would need session tracking for real last activity
     }));
 
@@ -731,10 +731,16 @@ export const getProductInsights = async (req, res) => {
       { $match: { orderCount: { $lte: 2 } } } // Rarely ordered = 2 or fewer orders
     ]);
 
-    const rarelyOrderedProducts = allProducts.filter(product => 
-      orderedProductIds.some(op => op._id && op._id.toString() === product._id.toString()) ||
-      !orderedProductIds.some(op => op._id && op._id.toString() === product._id.toString())
-    );
+    // Build a Set of ordered product ids for fast, safe membership checks
+    const orderedProductIdSet = new Set(orderedProductIds.map(op => op._id ? String(op._id) : null).filter(Boolean));
+
+    // Rarely ordered products are those present in allProducts where their id appears in orderedProductIdSet
+    // (ordered <= 2). If orderedProductIdSet is empty, treat all products as rarely ordered.
+    const rarelyOrderedProducts = allProducts.filter(product => {
+      const pid = String(product._id);
+      if (orderedProductIdSet.size === 0) return true;
+      return orderedProductIdSet.has(pid);
+    });
 
     res.json({
       success: true,

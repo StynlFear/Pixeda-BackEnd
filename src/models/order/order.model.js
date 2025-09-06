@@ -5,6 +5,7 @@ const orderItemSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product'
   },
+  materialsSnapshot: [{ type: String, trim: true }],
   productNameSnapshot: { type: String, trim: true },
   descriptionSnapshot: { type: String, trim: true },
   priceSnapshot: { type: Number, min: 0 },
