@@ -43,27 +43,39 @@ export const listOrders = async (req, res) => {
     const status = req.query.status;
     const priority = req.query.priority;
     const customer = req.query.customer;
+    const orderNumber = req.query.orderNumber ? Number(req.query.orderNumber) : null;
 
     let q = {};
 
-    // Text search
-    if (search) {
-      q.$text = { $search: search };
-    }
+    if (orderNumber && Number.isInteger(orderNumber) && orderNumber > 0) {
+      q.orderNumber = orderNumber;
+    } else {
+      if (search) {
+        // If search is pure digits, allow direct orderNumber lookup fallback
+        if (/^\d+$/.test(search)) {
+          q.$or = [
+            { orderNumber: Number(search) },
+            { $text: { $search: search } }
+          ];
+        } else {
+          q.$text = { $search: search };
+        }
+      }
 
-    // Status filter
-    if (status) {
-      q.status = status;
-    }
+      // Status filter
+      if (status) {
+        q.status = status;
+      }
 
-    // Priority filter
-    if (priority) {
-      q.priority = priority;
-    }
+      // Priority filter
+      if (priority) {
+        q.priority = priority;
+      }
 
-    // Customer filter
-    if (customer) {
-      q.customer = customer;
+      // Customer filter
+      if (customer) {
+        q.customer = customer;
+      }
     }
 
     const [items, total] = await Promise.all([

@@ -10,6 +10,8 @@ export const itemIdParamValidator = [
 ];
 
 export const createOrderValidator = [
+  // Disallow manual orderNumber
+  body('orderNumber').not().exists().withMessage('orderNumber is auto-generated'),
   body("dueDate").isISO8601().withMessage("Invalid due date format"),
   body("receivedThrough")
     .isIn(["FACEBOOK", "WHATSAPP", "PHONE", "IN_PERSON", "EMAIL"])
@@ -60,6 +62,7 @@ export const createOrderValidator = [
 ];
 
 export const updateOrderValidator = [
+  body('orderNumber').not().exists().withMessage('orderNumber cannot be changed'),
   body("dueDate").optional().isISO8601().withMessage("Invalid due date format"),
   body("receivedThrough")
     .optional()
@@ -129,6 +132,7 @@ export const listOrdersValidator = [
   query("limit").optional().isInt({ min: 1, max: 100 }).toInt(),
   query("sort").optional().isString(),
   query("search").optional().isString().trim(),
+  query('orderNumber').optional().isInt({ min: 1 }).withMessage('orderNumber must be positive'),
   query("status")
     .optional()
     .isIn(["TO_DO", "READY_TO_BE_TAKEN", "IN_EXECUTION", "IN_PAUSE", "IN_PROGRESS", "DONE", "CANCELLED"])

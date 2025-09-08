@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Counter from "../counter.model.js";
 
 const orderItemSchema = new mongoose.Schema({
   product: {
@@ -45,6 +46,7 @@ const orderItemSchema = new mongoose.Schema({
 
 const orderSchema = new mongoose.Schema(
   {
+    orderNumber: { type: Number, unique: true, index: true },
     dueDate: { type: Date },
     receivedThrough: {
       type: String,
@@ -74,6 +76,17 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Auto-increment orderNumber only when creating
+orderSchema.pre('save', async function(next) {
+  if (!this.isNew || this.orderNumber != null) return next();
+  try {
+    this.orderNumber = await Counter.getNext('orderNumber');
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Indexes for performance
 orderSchema.index({ customer: 1 });
